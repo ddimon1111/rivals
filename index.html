@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rivals 1v1 Demo</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(9, 14, 30, 0.82);
+      --accent: #55c2ff;
+      --good: #46d870;
+      --bad: #ff4b5c;
+      --text: #e5eeff;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 30% 20%, #1c2b56 0%, #0b1020 55%);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    #game {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .panel {
+      position: absolute;
+      pointer-events: auto;
+      background: var(--panel);
+      border: 1px solid rgba(112, 166, 255, 0.25);
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(6px);
+    }
+
+    #lobbyPanel {
+      top: 16px;
+      left: 16px;
+      width: 320px;
+      padding: 14px;
+    }
+
+    h1, h2, p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      color: #081020;
+      font-weight: 700;
+      background: linear-gradient(180deg, #8ad8ff, #52c0ff);
+      transition: transform 0.05s ease, filter 0.2s ease;
+    }
+
+    button:hover { filter: brightness(1.08); }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    #status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #b8ccff;
+      min-height: 18px;
+    }
+
+    #playerList {
+      margin-top: 10px;
+      font-size: 13px;
+      padding-left: 18px;
+      min-height: 36px;
+    }
+
+    #hud {
+      position: absolute;
+      bottom: 18px;
+      left: 16px;
+      width: 360px;
+      padding: 12px;
+      display: none;
+    }
+
+    .hp-wrap {
+      width: 100%;
+      height: 16px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.14);
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.2);
+      margin-top: 6px;
+    }
+
+    #hpFill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ff6767, #f6d365 60%, #5cff95);
+      transform-origin: left center;
+      transition: transform 0.08s linear;
+    }
+
+    #topInfo {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      min-width: 200px;
+      padding: 10px;
+      text-align: right;
+      font-size: 14px;
+      display: none;
+    }
+
+    #crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      transform: translate(-50%, -50%);
+      display: none;
+      opacity: 0.95;
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      background: #ffffff;
+      box-shadow: 0 0 6px rgba(255,255,255,0.8);
+    }
+
+    #crosshair::before { left: 5px; top: 0; width: 2px; height: 12px; }
+    #crosshair::after { top: 5px; left: 0; width: 12px; height: 2px; }
+
+    #hint {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      padding: 10px;
+      font-size: 12px;
+      opacity: 0.9;
+      max-width: 340px;
+    }
+
+    .ok { color: var(--good); }
+    .bad { color: var(--bad); }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="ui">
+    <section class="panel" id="lobbyPanel">
+      <h1>🎯 Rivals 1v1 Lobby</h1>
+      <div style="font-size:13px; line-height:1.4; color:#c5d5ff;">
+        Создайте матч или присоединитесь к ожидающему игроку.
+      </div>
+      <div class="row">
+        <button id="createBtn">Создать матч</button>
+        <button id="joinBtn">Присоединиться</button>
+      </div>
+      <div id="status">Отключено</div>
+      <ul id="playerList"></ul>
+    </section>
+
+    <section class="panel" id="hud">
+      <div style="display:flex; justify-content:space-between; font-size:13px;">
+        <strong>HP</strong>
+        <span id="hpText">100 / 100</span>
+      </div>
+      <div class="hp-wrap"><div id="hpFill"></div></div>
+    </section>
+
+    <section class="panel" id="topInfo">
+      <div id="scoreText">Kills: 0 | Deaths: 0</div>
+      <div id="timerText" style="margin-top:4px; color:#b8ccff;">Time: 00:00</div>
+    </section>
+
+    <div id="crosshair"></div>
+
+    <section class="panel" id="hint">
+      Управление: <b>WASD</b> — движение, <b>Space</b> — прыжок, <b>ЛКМ</b> — стрельба, <b>клик по экрану</b> — pointer lock.
+    </section>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
+
+    const WS_URL = `ws://${location.hostname || 'localhost'}:8080`;
+    const canvas = document.getElementById('game');
+    const createBtn = document.getElementById('createBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    const statusEl = document.getElementById('status');
+    const playerListEl = document.getElementById('playerList');
+    const lobbyPanel = document.getElementById('lobbyPanel');
+    const hud = document.getElementById('hud');
+    const topInfo = document.getElementById('topInfo');
+    const hpFill = document.getElementById('hpFill');
+    const hpText = document.getElementById('hpText');
+    const scoreText = document.getElementById('scoreText');
+    const timerText = document.getElementById('timerText');
+    const crosshair = document.getElementById('crosshair');
+
+    const state = {
+      ws: null,
+      connected: false,
+      myId: null,
+      roomId: null,
+      inMatch: false,
+      matchStartTs: 0,
+      hp: 100,
+      maxHp: 100,
+      kills: 0,
+      deaths: 0,
+      players: new Map(),
+      obstacles: [],
+      bullets: [],
+      impacts: [],
+      pendingLobby: [],
+      keys: new Set(),
+      canJump: false,
+      velocity: new THREE.Vector3(),
+      yaw: 0,
+      pitch: 0,
+      lastShotAt: 0,
+      spawnProtectionUntil: 0,
+      localPlayer: {
+        pos: new THREE.Vector3(0, 1, 0),
+        radius: 0.45,
+        halfH: 0.9,
+        yaw: 0
+      },
+      remoteSnapshots: new Map(),
+      lastNetSent: 0,
+      pointerLocked: false
+    };
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x7db9ff);
+    scene.fog = new THREE.Fog(0x7db9ff, 25, 90);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 160);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    sun.position.set(12, 20, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 80;
+    sun.shadow.camera.left = -30;
+    sun.shadow.camera.right = 30;
+    sun.shadow.camera.top = 30;
+    sun.shadow.camera.bottom = -30;
+    scene.add(sun);
+
+    const ground = new THREE.Mesh(
+      new THREE.BoxGeometry(80, 1, 80),
+      new THREE.MeshStandardMaterial({ color: 0x223a5f })
+    );
+    ground.receiveShadow = true;
+    ground.position.y = -0.5;
+    scene.add(ground);
+
+    const obstacleGeometry = new THREE.BoxGeometry(3, 3, 3);
+    const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x4c648a });
+    const obstaclePositions = [
+      [-8, 1.5, -6], [8, 1.5, -6], [-8, 1.5, 6], [8, 1.5, 6],
+      [0, 1.5, 0], [0, 1.5, 10], [0, 1.5, -10], [12, 1.5, 0], [-12, 1.5, 0],
+    ];
+
+    for (const [x, y, z] of obstaclePositions) {
+      const m = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      scene.add(m);
+      const box = new THREE.Box3().setFromObject(m);
+      state.obstacles.push({ mesh: m, box });
+    }
+
+    const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+    const myMaterial = new THREE.MeshStandardMaterial({ color: 0x55ff96 });
+    const enemyMaterial = new THREE.MeshStandardMaterial({ color: 0xff6a6a });
+
+    const myMesh = new THREE.Mesh(playerGeometry, myMaterial);
+    myMesh.visible = false;
+    myMesh.castShadow = true;
+    scene.add(myMesh);
+
+    function makeEnemyMesh() {
+      const m = new THREE.Mesh(playerGeometry, enemyMaterial);
+      m.castShadow = true;
+      scene.add(m);
+      return m;
+    }
+
+    function setStatus(text, cls = '') {
+      statusEl.className = cls;
+      statusEl.textContent = text;
+    }
+
+    function updateLobbyPlayers(list) {
+      playerListEl.innerHTML = '';
+      for (const p of list) {
+        const li = document.createElement('li');
+        li.textContent = `Игрок ${p.id.slice(0, 6)} ${p.ready ? '(готов)' : '(в лобби)'}`;
+        playerListEl.appendChild(li);
+      }
+      if (!list.length) {
+        const li = document.createElement('li');
+        li.textContent = 'Пока никого нет';
+        playerListEl.appendChild(li);
+      }
+    }
+
+    function send(type, data = {}) {
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+      state.ws.send(JSON.stringify({ type, ...data }));
+    }
+
+    function connectWS() {
+      setStatus('Подключение к серверу...', '');
+      const ws = new WebSocket(WS_URL);
+      state.ws = ws;
+
+      ws.onopen = () => {
+        state.connected = true;
+        setStatus('Соединение установлено ✅', 'ok');
+        createBtn.disabled = false;
+        joinBtn.disabled = false;
+      };
+
+      ws.onclose = () => {
+        state.connected = false;
+        setStatus('Соединение потеряно ❌', 'bad');
+        createBtn.disabled = true;
+        joinBtn.disabled = true;
+      };
+
+      ws.onerror = () => {
+        setStatus('Ошибка WebSocket (проверьте локальный сервер)', 'bad');
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        handleServerMessage(msg);
+      };
+    }
+
+    function handleServerMessage(msg) {
+      switch (msg.type) {
+        case 'welcome':
+          state.myId = msg.id;
+          break;
+        case 'lobbyState':
+          state.pendingLobby = msg.players;
+          updateLobbyPlayers(msg.players);
+          if (!state.inMatch) {
+            setStatus(msg.waiting ? 'Ожидание второго игрока...' : 'Готово к старту');
+          }
+          break;
+        case 'matchStart':
+          state.roomId = msg.roomId;
+          state.inMatch = true;
+          state.matchStartTs = performance.now();
+          state.kills = 0;
+          state.deaths = 0;
+          resetLocalPlayer(msg.spawn);
+          lobbyPanel.style.display = 'none';
+          hud.style.display = 'block';
+          topInfo.style.display = 'block';
+          crosshair.style.display = 'block';
+          setStatus('Матч начался!', 'ok');
+          break;
+        case 'snapshot':
+          applySnapshot(msg);
+          break;
+        case 'shot':
+          spawnRemoteBullet(msg);
+          break;
+        case 'damage':
+          if (msg.targetId === state.myId) {
+            state.hp = msg.hp;
+            updateHpUI();
+          }
+          spawnImpact(new THREE.Vector3(msg.at.x, msg.at.y, msg.at.z));
+          break;
+        case 'killed':
+          if (msg.killerId === state.myId) state.kills += 1;
+          if (msg.victimId === state.myId) state.deaths += 1;
+          updateScoreUI();
+          break;
+        case 'respawn':
+          if (msg.id === state.myId) {
+            resetLocalPlayer(msg.spawn);
+            state.hp = 100;
+            state.spawnProtectionUntil = performance.now() + 1200;
+            updateHpUI();
+          }
+          break;
+        case 'playerLeft':
+          setStatus('Противник вышел. Возврат в лобби...', 'bad');
+          endMatchToLobby();
+          break;
+      }
+    }
+
+    function resetLocalPlayer(spawn) {
+      state.localPlayer.pos.set(spawn.x, spawn.y, spawn.z);
+      state.velocity.set(0, 0, 0);
+      state.hp = 100;
+      state.canJump = false;
+      updateHpUI();
+    }
+
+    function updateHpUI() {
+      const clamped = Math.max(0, Math.min(100, state.hp));
+      hpFill.style.transform = `scaleX(${clamped / 100})`;
+      hpText.textContent = `${Math.round(clamped)} / ${state.maxHp}`;
+    }
+
+    function updateScoreUI() {
+      scoreText.textContent = `Kills: ${state.kills} | Deaths: ${state.deaths}`;
+    }
+
+    function endMatchToLobby() {
+      state.inMatch = false;
+      state.roomId = null;
+      lobbyPanel.style.display = 'block';
+      hud.style.display = 'none';
+      topInfo.style.display = 'none';
+      crosshair.style.display = 'none';
+      for (const p of state.players.values()) {
+        scene.remove(p.mesh);
+      }
+      state.players.clear();
+    }
+
+    function applySnapshot(msg) {
+      if (!state.inMatch) return;
+      for (const remote of msg.players) {
+        if (remote.id === state.myId) continue;
+        let entry = state.players.get(remote.id);
+        if (!entry) {
+          entry = {
+            mesh: makeEnemyMesh(),
+            pos: new THREE.Vector3(remote.x, remote.y, remote.z),
+            targetPos: new THREE.Vector3(remote.x, remote.y, remote.z),
+            yaw: remote.yaw,
+            targetYaw: remote.yaw,
+            hp: remote.hp
+          };
+          state.players.set(remote.id, entry);
+        }
+        entry.targetPos.set(remote.x, remote.y, remote.z);
+        entry.targetYaw = remote.yaw;
+        entry.hp = remote.hp;
+      }
+
+      for (const id of [...state.players.keys()]) {
+        if (!msg.players.find((p) => p.id === id)) {
+          const old = state.players.get(id);
+          scene.remove(old.mesh);
+          state.players.delete(id);
+        }
+      }
+    }
+
+    function spawnBullet(origin, dir, ownerId, speed = 35, ttl = 1.2) {
+      if (state.bullets.length > 120) state.bullets.shift();
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 8, 8),
+        new THREE.MeshStandardMaterial({ color: ownerId === state.myId ? 0xaefaff : 0xffc6c6, emissive: 0x222222 })
+      );
+      mesh.position.copy(origin);
+      mesh.castShadow = false;
+      scene.add(mesh);
+      state.bullets.push({ mesh, vel: dir.clone().multiplyScalar(speed), ttl, ownerId });
+    }
+
+    function spawnRemoteBullet(msg) {
+      const o = new THREE.Vector3(msg.origin.x, msg.origin.y, msg.origin.z);
+      const d = new THREE.Vector3(msg.dir.x, msg.dir.y, msg.dir.z);
+      spawnBullet(o, d, msg.ownerId, 35, 1.2);
+    }
+
+    function spawnImpact(pos) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffdd88, transparent: true, opacity: 0.95 })
+      );
+      m.position.copy(pos);
+      scene.add(m);
+      state.impacts.push({ mesh: m, ttl: 0.18 });
+    }
+
+    function shoot() {
+      const now = performance.now();
+      if (!state.inMatch) return;
+      if (now - state.lastShotAt < 150) return;
+      if (now < state.spawnProtectionUntil) return;
+      state.lastShotAt = now;
+
+      const eye = state.localPlayer.pos.clone().add(new THREE.Vector3(0, 1.2, 0));
+      const dir = new THREE.Vector3(
+        Math.sin(state.yaw) * Math.cos(state.pitch),
+        Math.sin(state.pitch),
+        Math.cos(state.yaw) * Math.cos(state.pitch)
+      ).normalize();
+
+      spawnBullet(eye, dir, state.myId);
+      send('shoot', {
+        origin: { x: eye.x, y: eye.y, z: eye.z },
+        dir: { x: dir.x, y: dir.y, z: dir.z }
+      });
+    }
+
+    function playerAABB(pos) {
+      return new THREE.Box3(
+        new THREE.Vector3(pos.x - state.localPlayer.radius, pos.y - state.localPlayer.halfH, pos.z - state.localPlayer.radius),
+        new THREE.Vector3(pos.x + state.localPlayer.radius, pos.y + state.localPlayer.halfH, pos.z + state.localPlayer.radius)
+      );
+    }
+
+    function solveCollisions(nextPos) {
+      const minX = -39, maxX = 39, minZ = -39, maxZ = 39;
+      nextPos.x = Math.max(minX, Math.min(maxX, nextPos.x));
+      nextPos.z = Math.max(minZ, Math.min(maxZ, nextPos.z));
+
+      const me = playerAABB(nextPos);
+      for (const o of state.obstacles) {
+        if (!me.intersectsBox(o.box)) continue;
+
+        const obsCenter = o.box.getCenter(new THREE.Vector3());
+        const dx = nextPos.x - obsCenter.x;
+        const dz = nextPos.z - obsCenter.z;
+        const px = (state.localPlayer.radius + 1.5) - Math.abs(dx);
+        const pz = (state.localPlayer.radius + 1.5) - Math.abs(dz);
+
+        if (px < pz) nextPos.x += dx > 0 ? px : -px;
+        else nextPos.z += dz > 0 ? pz : -pz;
+      }
+
+      if (nextPos.y <= 1) {
+        nextPos.y = 1;
+        state.velocity.y = Math.max(0, state.velocity.y);
+        state.canJump = true;
+      }
+    }
+
+    function updateMovement(dt) {
+      const speed = 8;
+      const accel = 30;
+      const friction = state.canJump ? 12 : 3;
+
+      const forward = new THREE.Vector3(Math.sin(state.yaw), 0, Math.cos(state.yaw));
+      const right = new THREE.Vector3(forward.z, 0, -forward.x);
+      const input = new THREE.Vector3();
+
+      if (state.keys.has('KeyW')) input.add(forward);
+      if (state.keys.has('KeyS')) input.sub(forward);
+      if (state.keys.has('KeyD')) input.add(right);
+      if (state.keys.has('KeyA')) input.sub(right);
+      if (input.lengthSq() > 0) input.normalize();
+
+      const targetVx = input.x * speed;
+      const targetVz = input.z * speed;
+      state.velocity.x += (targetVx - state.velocity.x) * Math.min(1, accel * dt);
+      state.velocity.z += (targetVz - state.velocity.z) * Math.min(1, accel * dt);
+      state.velocity.x *= (1 - Math.min(0.95, friction * dt));
+      state.velocity.z *= (1 - Math.min(0.95, friction * dt));
+
+      state.velocity.y -= 24 * dt;
+
+      const next = state.localPlayer.pos.clone().addScaledVector(state.velocity, dt);
+      solveCollisions(next);
+      state.localPlayer.pos.copy(next);
+      state.localPlayer.yaw = state.yaw;
+    }
+
+    function updateBullets(dt) {
+      for (let i = state.bullets.length - 1; i >= 0; i--) {
+        const b = state.bullets[i];
+        b.ttl -= dt;
+        if (b.ttl <= 0) {
+          scene.remove(b.mesh);
+          state.bullets.splice(i, 1);
+          continue;
+        }
+
+        b.mesh.position.addScaledVector(b.vel, dt);
+
+        if (Math.abs(b.mesh.position.x) > 42 || Math.abs(b.mesh.position.z) > 42 || b.mesh.position.y < -2 || b.mesh.position.y > 20) {
+          scene.remove(b.mesh);
+          state.bullets.splice(i, 1);
+          continue;
+        }
+
+        const bulletPoint = b.mesh.position;
+        for (const o of state.obstacles) {
+          if (o.box.distanceToPoint(bulletPoint) <= 0.07) {
+            spawnImpact(bulletPoint.clone());
+            scene.remove(b.mesh);
+            state.bullets.splice(i, 1);
+            break;
+          }
+        }
+      }
+    }
+
+    function updateImpacts(dt) {
+      for (let i = state.impacts.length - 1; i >= 0; i--) {
+        const e = state.impacts[i];
+        e.ttl -= dt;
+        e.mesh.scale.multiplyScalar(1 + 6 * dt);
+        e.mesh.material.opacity = Math.max(0, e.ttl / 0.18);
+        if (e.ttl <= 0) {
+          scene.remove(e.mesh);
+          state.impacts.splice(i, 1);
+        }
+      }
+    }
+
+    function updateRemotePlayers(dt) {
+      for (const p of state.players.values()) {
+        p.pos.lerp(p.targetPos, Math.min(1, 12 * dt));
+        p.yaw += (p.targetYaw - p.yaw) * Math.min(1, 10 * dt);
+
+        p.mesh.position.copy(p.pos);
+        p.mesh.rotation.y = p.yaw;
+      }
+    }
+
+    function updateLocalVisuals() {
+      myMesh.position.copy(state.localPlayer.pos);
+      myMesh.rotation.y = state.yaw;
+
+      const camDist = 4.2;
+      const camHeight = 2.4;
+      const ideal = new THREE.Vector3(
+        state.localPlayer.pos.x - Math.sin(state.yaw) * camDist,
+        state.localPlayer.pos.y + camHeight + Math.sin(state.pitch) * 1.2,
+        state.localPlayer.pos.z - Math.cos(state.yaw) * camDist
+      );
+
+      camera.position.lerp(ideal, 0.18);
+      const lookAt = state.localPlayer.pos.clone().add(new THREE.Vector3(0, 1.2, 0));
+      camera.lookAt(lookAt);
+    }
+
+    function netSync(now) {
+      if (!state.inMatch || !state.connected || now - state.lastNetSent < 50) return;
+      state.lastNetSent = now;
+      send('inputState', {
+        x: state.localPlayer.pos.x,
+        y: state.localPlayer.pos.y,
+        z: state.localPlayer.pos.z,
+        yaw: state.yaw,
+        hp: state.hp
+      });
+    }
+
+    function formatTime(ms) {
+      const total = Math.floor(ms / 1000);
+      const m = String(Math.floor(total / 60)).padStart(2, '0');
+      const s = String(total % 60).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.033, clock.getDelta());
+      const now = performance.now();
+
+      if (state.inMatch) {
+        updateMovement(dt);
+        updateBullets(dt);
+        updateImpacts(dt);
+        updateRemotePlayers(dt);
+        updateLocalVisuals();
+        netSync(now);
+        timerText.textContent = `Time: ${formatTime(now - state.matchStartTs)}`;
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    createBtn.addEventListener('click', () => {
+      if (!state.connected) return;
+      send('createMatch');
+      setStatus('Матч создан. Ожидание оппонента...', '');
+    });
+
+    joinBtn.addEventListener('click', () => {
+      if (!state.connected) return;
+      send('joinMatch');
+      setStatus('Попытка присоединения...', '');
+    });
+
+    document.addEventListener('keydown', (e) => {
+      state.keys.add(e.code);
+      if (e.code === 'Space' && state.canJump && state.inMatch) {
+        state.velocity.y = 10;
+        state.canJump = false;
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      state.keys.delete(e.code);
+    });
+
+    canvas.addEventListener('click', () => {
+      if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+      if (state.inMatch) shoot();
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (e.button === 0 && state.pointerLocked && state.inMatch) shoot();
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      state.pointerLocked = document.pointerLockElement === canvas;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!state.pointerLocked) return;
+      const sens = 0.0023;
+      state.yaw -= e.movementX * sens;
+      state.pitch -= e.movementY * sens;
+      state.pitch = Math.max(-1.15, Math.min(1.15, state.pitch));
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    connectWS();
+    updateHpUI();
+    updateScoreUI();
+    animate();
+  </script>
+</body>
+</html>
